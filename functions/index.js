@@ -1,40 +1,11 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
-
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
-
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
-
-// // http request 1
-// exports.randomNumber = onRequest((request, response) => {
-//   const number = Math.round(Math.random() * 100);
-//   response.send(number.toString());
-// });
-
-// // http request 2
-// exports.toTheDojo = onRequest((request, response) => {
-//   console.log("네이버 가는 중");
-//   response.redirect("https://www.naver.com");
-// });
-
-// cors
-// const cors = require("cors")({
-//   origin: ["http://localhost:5000", "https://us-central1-popticle-71e6e.cloudfunctions.net"],
-//   credentials: true,
-// });
-
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const axios = require("axios");
+const fs = require("fs");
+const FormData = require("form-data");
+const path = require("path");
+const os = require("os");
+
 admin.initializeApp();
 
 // http callable function
@@ -76,15 +47,20 @@ exports.addRequests = functions.https.onCall((data, context) => {
     );
   }
   // it is a promise function
-  return new Promise((resolve, reject)=>{
-    admin.firestore().collection("requests").add({
-      text: data.text,
-      upvotes: 0,
-    }).then(()=>{
-      return resolve();
-    }).catch((e)=>{
-      return reject(e);
-    });
+  return new Promise((resolve, reject) => {
+    admin
+        .firestore()
+        .collection("requests")
+        .add({
+          text: data.text,
+          upvotes: 0,
+        })
+        .then(() => {
+          return resolve();
+        })
+        .catch((e) => {
+          return reject(e);
+        });
   });
 });
 
@@ -119,20 +95,71 @@ exports.upvote = functions.https.onCall(async (data, context) => {
   });
 });
 
-// firestore trigger for tracking activity
-// exports.logActivities = functions.firestore.document("/{collection}/{id}")
-//     .onCreate((snap, context)=>{
-//       console.log(snap.data());
-//       const collection = context.params.collection;
-//       // const id = context.params.id;
+exports.unity2ai = functions.storage.object().onFinalize(async (object) => {
+  if (object.name.startsWith("unity2ai/")) {
+    console.log("File uploaded in unity2ai:", object.name);
 
-//       const activities = admin.firestore().collection("activities");
+    // Prepare the file paths
+    const tempFilePath = path.join(os.tmpdir(), path.basename(object.name));
+    const bucket = admin.storage().bucket();
 
-//       if (collection === "requests") {
-//         return activities.add({text: "a new tutorial request was added"});
-//       }
+    // Download the file to the temporary directory
+    await bucket.file(object.name).download({destination: tempFilePath});
 
-//       if (collection === "users") {
-//         return activities.add({text: "a new user signed up"});
-//       }
+    // Prepare the form data
+    const formData = new FormData();
+    formData.append("image_file", fs.createReadStream(tempFilePath));
+
+    // Send the file to the server
+    const url = `http://221.163.19.218:33335/main/upload`; // Replace with the actual endpoint
+    await axios.post(url, formData, {
+      headers: formData.getHeaders(),
+    });
+    console.log("File sent to server");
+
+    // Clean up the temporary file
+    fs.unlinkSync(tempFilePath);
+  }
+});
+
+// exports.unity2ai = functions.storage.object().onFinalize(async (object) => {
+//   if (object.name.startsWith("unity2ai/")) {
+//     console.log("File uploaded in unity2ai:", object.name);
+
+//     // const bucket = admin.storage().bucket();
+//     // const filePath = path.join("/tmp/unity2ai/", object.name);
+//     // await bucket.file(object.name).download({destination: filePath});
+
+//     const url = `http://221.163.19.218:33335/upload`; // Replace with the actual endpoint
+//     const formData = new FormData();
+//     formData.append("file", fs.createReadStream(object.name));
+
+//     await axios.post(url, formData, {
+//       headers: formData.getHeaders(),
 //     });
+//     console.log("File sent to server");
+//   }
+// });
+
+
+// // eslint-disable-next-line require-jsdoc
+// async function downloadFile(fileName) {
+//   const bucket = admin.storage().bucket();
+//   const filePath = path.join("/tmp", fileName);
+//   await bucket.file(fileName).download({destination: filePath});
+//   return filePath;
+// }
+
+// // eslint-disable-next-line require-jsdoc
+// async function sendFileToServer(filePath, serverIp) {
+//   const url = `http://${serverIp}/upload`; // Replace with the actual endpoint
+//   const formData = new FormData();
+//   formData.append("file", fs.createReadStream(filePath));
+
+//   const response = await axios.post(url, formData, {
+//     headers: formData.getHeaders(),
+//   });
+//   console.log("File sent to server:", response.data);
+// }
+
+
